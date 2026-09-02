@@ -1,0 +1,19 @@
+{
+  "network": "cardano-preprod",
+  "viaChainId": 2273266,
+  "midnightViaChainId": 64364450,
+  "confirmations": 1,
+  "actionKind": "TREASURY_PAYMENT",
+  "protocol": {
+    "executor": "REPLACE_AFTER_AIKEN_BUILD",
+    "votingAdapter": "REPLACE_AFTER_AIKEN_BUILD",
+    "treasury": "REPLACE_AFTER_AIKEN_BUILD"
+  },
+  "midnight": {
+    "privateDao": "REPLACE_AFTER_COMPACT_DEPLOYMENT"
+  },
+  "via": {
+    "cardanoEndpoint": "REPLACE_AFTER_VIA_ONBOARDING",
+    "midnightEndpoint": "REPLACE_AFTER_VIA_ONBOARDING"
+  }
+}

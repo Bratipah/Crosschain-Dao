@@ -1,0 +1,17 @@
+{
+  "name": "cardano-midnight-omnichain-dao",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "protocol:test": "tsx scripts/e2e-test.ts",
+    "build:cardano": "bash scripts/build-cardano.sh",
+    "deploy:cardano:preprod": "bash scripts/deploy-cardano-preprod.sh",
+    "deploy:midnight:preview": "bash scripts/deploy-midnight-preview.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.8.0"
+  }
+}

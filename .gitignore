@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.aiken/
+.env
+*.skey
+*.seed
+*.mnemonic
+*.secret
+*.key
+*.pem
+cardano-node.socket
+*.raw
+*.signed

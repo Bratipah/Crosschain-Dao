@@ -1,0 +1,10 @@
+name = "cardano-midnight/omnichain-dao"
+version = "0.2.0"
+compiler = "v1.1.22"
+
+[repository]
+user = "cardano-midnight"
+project = "omnichain-dao"
+platform = "github"
+
+[config]

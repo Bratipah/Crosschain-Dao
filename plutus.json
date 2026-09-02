@@ -1,0 +1,12 @@
+{
+  "preamble": {
+    "title": "cardano-midnight/omnichain-dao",
+    "version": "0.2.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.23+8949565"
+    }
+  },
+  "validators": []
+}

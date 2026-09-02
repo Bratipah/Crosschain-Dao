@@ -1,0 +1,231 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+/**
+ * PrivateDAO governance coordinator.
+ *
+ * Cardano Preprod VIA chain: 2273266
+ * Midnight Preview VIA chain: 64364450
+ *
+ * This contract owns governance state and private voter proofs. VIA is the
+ * transport boundary; its supplied Midnight client is integrated separately.
+ */
+
+export ledger cardanoChainId: Uint<64>;
+export ledger proposalNonce: Uint<64>;
+export ledger proposalExists: Map<Uint<64>, Boolean>;
+export ledger proposalState: Map<Uint<64>, Uint<8>>;
+export ledger proposalDestination: Map<Uint<64>, Uint<64>>;
+export ledger proposalExecutor: Map<Uint<64>, Bytes<32>>;
+export ledger proposalActionHash: Map<Uint<64>, Bytes<32>>;
+export ledger proposalSnapshot: Map<Uint<64>, Uint<64>>;
+export ledger proposalStart: Map<Uint<64>, Uint<64>>;
+export ledger proposalEnd: Map<Uint<64>, Uint<64>>;
+export ledger proposalQuorum: Map<Uint<64>, Uint<64>>;
+export ledger proposalThreshold: Map<Uint<64>, Uint<64>>;
+export ledger proposalRecipient: Map<Uint<64>, Bytes<32>>;
+export ledger proposalAmount: Map<Uint<64>, Uint<64>>;
+export ledger proposalNotBefore: Map<Uint<64>, Uint<64>>;
+export ledger proposalExpiresAt: Map<Uint<64>, Uint<64>>;
+
+export ledger yesVotes: Map<Uint<64>, Uint<64>>;
+export ledger noVotes: Map<Uint<64>, Uint<64>>;
+export ledger abstainVotes: Map<Uint<64>, Uint<64>>;
+export ledger voteNullifiers: Map<Bytes<32>, Boolean>;
+export ledger processedMessages: Map<Bytes<32>, Boolean>;
+export ledger authorizedCardanoEndpoints: Map<Bytes<32>, Boolean>;
+export ledger executionAuthorized: Map<Uint<64>, Boolean>;
+export ledger executionDispatched: Map<Uint<64>, Boolean>;
+export ledger executionCompleted: Map<Uint<64>, Boolean>;
+export ledger executionNonce: Map<Uint<64>, Uint<64>>;
+
+witness voterSecret(): Bytes<32>;
+witness votingEligibilityProof(): [Boolean, Uint<64>, Bytes<32>];
+witness currentTime(): Uint<64>;
+
+export circuit voterCommitment(): Bytes<32> {
+  return persistentHash<Bytes<32>>(voterSecret());
+}
+
+export circuit createTreasuryProposal(
+  executor: Bytes<32>,
+  actionHash: Bytes<32>,
+  recipient: Bytes<32>,
+  amount: Uint<64>,
+  notBefore: Uint<64>,
+  expiresAt: Uint<64>,
+  snapshot: Uint<64>,
+  startTime: Uint<64>,
+  endTime: Uint<64>,
+  quorum: Uint<64>,
+  threshold: Uint<64>
+  ): Uint<64> {
+    
+  assert(amount > 0);
+  assert(expiresAt >= notBefore);
+  assert(endTime > startTime);
+  assert(quorum > 0);
+  assert(threshold > 0);
+
+  const id: Uint<64> = proposalNonce;
+  proposalNonce = proposalNonce + 1;
+
+  proposalExists[id] = true;
+  proposalState[id] = 1; // ACTIVE
+  proposalDestination[id] = cardanoChainId;
+  proposalExecutor[id] = executor;
+  proposalActionHash[id] = actionHash;
+  proposalRecipient[id] = recipient;
+  proposalAmount[id] = amount;
+  proposalNotBefore[id] = notBefore;
+  proposalExpiresAt[id] = expiresAt;
+  proposalSnapshot[id] = snapshot;
+  proposalStart[id] = startTime;
+  proposalEnd[id] = endTime;
+  proposalQuorum[id] = quorum;
+  proposalThreshold[id] = threshold;
+  yesVotes[id] = 0;
+  noVotes[id] = 0;
+  abstainVotes[id] = 0;
+  executionAuthorized[id] = false;
+  executionDispatched[id] = false;
+  executionCompleted[id] = false;
+  executionNonce[id] = 0;
+  return id;
+}
+
+export circuit castPrivateVote(proposalId: Uint<64>, support: Uint<8>): [] {
+  assert(proposalExists[proposalId]);
+  assert(proposalState[proposalId] == 1);
+  assert(support == 1 || support == 2 || support == 3);
+  const now: Uint<64> = currentTime();
+  assert(now >= proposalStart[proposalId]);
+  assert(now <= proposalEnd[proposalId]);
+
+  const proof = votingEligibilityProof();
+  const isValid: Boolean = proof[0];  // Use bracket notation
+  const votingPower: Uint<64> = proof[1];  // Use bracket notation
+  const commitment: Bytes<32> = proof[2];  // Use bracket notation
+  
+  assert(isValid);
+  assert(votingPower > 0);
+  assert(commitment == voterCommitment());
+
+  const nullifier: Bytes<32> = persistentHash<Bytes<32>>(voterSecret());
+  assert(!voteNullifiers[nullifier]);
+  voteNullifiers[nullifier] = true;
+
+  if (support == 1) {
+    yesVotes[proposalId] = yesVotes[proposalId] + votingPower;
+  } else if (support == 2) {
+    noVotes[proposalId] = noVotes[proposalId] + votingPower;
+  } else {
+    abstainVotes[proposalId] = abstainVotes[proposalId] + votingPower;
+  }
+}
+
+export circuit processCardanoVote(
+  messageId: Bytes<32>,
+  sourceEndpoint: Bytes<32>,
+  proposalId: Uint<64>,
+  voteNullifier: Bytes<32>,
+  support: Uint<8>,
+  votingPower: Uint<64>,
+  snapshot: Uint<64>
+): [] {
+  assert(proposalExists[proposalId]);
+  assert(proposalState[proposalId] == 1);
+  assert(authorizedCardanoEndpoints[sourceEndpoint]);
+  assert(!processedMessages[messageId]);
+  assert(!voteNullifiers[voteNullifier]);
+  assert(proposalSnapshot[proposalId] == snapshot);
+  assert(support == 1 || support == 2 || support == 3);
+  assert(votingPower > 0);
+  const now: Uint<64> = currentTime();
+  assert(now >= proposalStart[proposalId]);
+  assert(now <= proposalEnd[proposalId]);
+
+  processedMessages[messageId] = true;
+  voteNullifiers[voteNullifier] = true;
+  if (support == 1) {
+    yesVotes[proposalId] = yesVotes[proposalId] + votingPower;
+  } else if (support == 2) {
+    noVotes[proposalId] = noVotes[proposalId] + votingPower;
+  } else {
+    abstainVotes[proposalId] = abstainVotes[proposalId] + votingPower;
+  }
+}
+
+export circuit beginSettlement(proposalId: Uint<64>): [] {
+  assert(proposalExists[proposalId]);
+  assert(proposalState[proposalId] == 1);
+  assert(currentTime() > proposalEnd[proposalId]);
+  proposalState[proposalId] = 2;
+}
+
+export circuit finalizeProposal(proposalId: Uint<64>): Boolean {
+  assert(proposalExists[proposalId]);
+  assert(proposalState[proposalId] == 2);
+  const total: Uint<64> = yesVotes[proposalId] + noVotes[proposalId] + abstainVotes[proposalId];
+  assert(total >= proposalQuorum[proposalId]);
+
+  if (yesVotes[proposalId] >= proposalThreshold[proposalId]) {
+    proposalState[proposalId] = 3;
+    executionAuthorized[proposalId] = true;
+    return true;
+  }
+
+  proposalState[proposalId] = 4;
+  executionAuthorized[proposalId] = false;
+  return false;
+}
+
+export circuit executionAuthorization(proposalId: Uint<64>): [Bytes<32>, Bytes<32>, Uint<64>, Uint<64>, Uint<64>] {
+  assert(proposalExists[proposalId]);
+  assert(executionAuthorized[proposalId]);
+  return [
+    proposalExecutor[proposalId],
+    proposalActionHash[proposalId],
+    proposalAmount[proposalId],
+    proposalNotBefore[proposalId],
+    proposalExpiresAt[proposalId]
+  ];
+}
+
+export circuit markExecutionDispatched(proposalId: Uint<64>): [] {
+  assert(proposalExists[proposalId]);
+  assert(proposalState[proposalId] == 3);
+  assert(!executionDispatched[proposalId]);
+  executionDispatched[proposalId] = true;
+  proposalState[proposalId] = 5;
+  executionNonce[proposalId] = executionNonce[proposalId] + 1;
+}
+
+export circuit processExecutionResult(
+  messageId: Bytes<32>,
+  sourceExecutor: Bytes<32>,
+  proposalId: Uint<64>,
+  nonce: Uint<64>,
+  success: Boolean,
+  actionHash: Bytes<32>
+): [] {
+  assert(proposalExists[proposalId]);
+  assert(sourceExecutor == proposalExecutor[proposalId]);
+  assert(actionHash == proposalActionHash[proposalId]);
+  assert(!processedMessages[messageId]);
+  assert(executionDispatched[proposalId]);
+  assert(nonce == executionNonce[proposalId]);
+  processedMessages[messageId] = true;
+
+  if (success) {
+    executionCompleted[proposalId] = true;
+    proposalState[proposalId] = 6;
+  } else {
+    proposalState[proposalId] = 7;
+  }
+}
+
+export circuit setCardanoEndpoint(endpoint: Bytes<32>, enabled: Boolean): [] {
+  authorizedCardanoEndpoints[endpoint] = enabled;
+}
